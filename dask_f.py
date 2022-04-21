@@ -1,5 +1,6 @@
 import numpy as np
 import dask.array as da
+from numpy.polynomial.legendre import legval
 
 
 # Covariance functions are taken from
@@ -74,6 +75,44 @@ def gcd_dask_future(lat, lon, client):
     x = client.submit(da.arctan2, 1, m)
     y = client.submit(da.multiply, x, r)  # get distance in km
     return y
+
+def legendre_matern(sigma, alpha, nu, theta, N, client):
+    """ ψ(θ)=σ² * Σ_{k=0}^N (α² + k²)^{-ν - .5} * P_k(cos(θ))
+    Args:
+        sigma (float): variance
+        alpha (float/int): range, α>0
+        nu (float): smoothness, ν>0
+        theta (array): great-circle distance
+        N (int): truncation order
+        client 
+
+    Returns:
+        covariance matrix of Legendre-Matern type: array
+    """
+    cos_theta = client.scatter(da.cos(theta)) # scatter to multiple workes cos(θ)
+    cos_theta = client.gather(cos_theta) # gather result
+    cos_theta = cos_theta.persist() # load into memory for calculations
+    term = da.zeros_like(theta) # coefficients [c_0,c_1,...,c_N] needed for sum: c_0*P_0(cos(θ)) + ... + c_N*P_N(cos(θ))
+    coefs = np.zeros(N)
+    for k in range(N):
+        coefs[k] = (alpha**2 + k**2)**(-nu - .5) 
+        ###
+        # c_0 = (α² + 0²)^(-ν - 0.5) 
+        # c_1 = (α² + 1²)^(-ν - 0.5)
+        # .
+        # .
+        # .
+        # c_N = (α²2 + N²)^(-ν - 0.5)   
+        ###
+    legendre = client.submit(legval, cos_theta, coefs) 
+    ###
+    # legendre = Σ_{k=0} ^ N (α² + k²)^{-ν - .5} * P_k(cos(θ))
+    #            = (α² + 0²)^(-ν - 0.5)*P_0(cos(θ)) + ... + (α² + N²)^(-ν - 0.5)*P_n(cos(θ))
+    #            = c_0*P_0(cos(θ)) + ... + c_N*P_N(cos(θ))
+    #            = Σ_{k=0} ^ N c_k * P_k(cos(θ)) done by legvan(cos_theta,coefs)
+    ###
+    return client.submit(da.multiply, sigma**2, legendre) ## just multiply legendre by sigma²
+
 
 
 def powered_exp(alpha, theta, tau, client):  # exp{-(αθ)^τ}
