@@ -76,6 +76,33 @@ def gcd_dask_future(lat, lon, client):
     y = client.submit(da.multiply, x, r)  # get distance in km
     return y
 
+def bernoulli(alpha, theta, lower,n, upper, client):
+    theta = client.scatter(theta)  
+    theta = client.persist(theta.result()) 
+    lower_index = da.arange(lower, -1, 1)
+    upper_index = da.arange(1, upper+1, 1)
+    coefs_lower = da.zeros_like(theta)
+    coefs_upper = da.zeros_like(theta)
+    for k in lower_index:
+        coefs_lower += da.float_power(abs(k),(-2*n)) * da.exp(k*theta*1j)
+    for k in upper_index:
+        coefs_upper += da.float_power(abs(k), (-2*n)) * da.exp(k*theta*1j)
+    lower = client.scatter(coefs_lower)
+    upper = client.scatter(coefs_upper)
+    return client.submit(da.add,lower,upper)
+
+def circular_matern(alpha, theta, nu, lower, upper, client):
+    theta = client.scatter(theta)  
+    theta = client.persist(theta.result())  
+    index = da.arange(lower, upper + 1, 1)
+    coefs = da.zeros_like(theta)
+    for k in index:
+        coefs += (alpha**2 + k**2)**(-nu - .5)*da.exp(k*theta*1j)
+    
+    coefficients = client.scatter(coefs)
+    return coefficients
+
+
 def legendre_matern(sigma, alpha, nu, theta, N, client):
     """ ψ(θ)=σ² * Σ_{k=0}^N (α² + k²)^{-ν - .5} * P_k(cos(θ))
     Args:
