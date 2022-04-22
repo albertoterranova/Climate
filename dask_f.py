@@ -16,6 +16,133 @@ from numpy.polynomial.legendre import legval
 #       -) sometimes we want to use da.float_power because it allows for float power
 #  ###
 
+""" Here I add also how I computed the forward operator for 6 months, a bit ugly but works (re-implementation of your code, considering all points including NaN's)
+# Localization Strategy (Ugly Version) : create great circle distance matrix for 1 month, then stack it to 6 months
+1) Forward operator 1 month: use two functions match_dataset and build_base_forward
+def match_datasets(base_dataset, dataset_tomatch):
+    
+    # Define original lat-lon grid
+    # Creates new columns converting coordinate degrees to radians.
+    lon_rad = np.deg2rad(base_dataset.longitude.values.astype(np.float32))
+    lat_rad = np.deg2rad(base_dataset.latitude.values.astype(np.float32))
+    lat_grid, lon_grid = np.meshgrid(lat_rad, lon_rad, indexing='ij')
+    
+    # Define grid to be matched.
+    lon_tomatch = np.deg2rad(dataset_tomatch.longitude.values.astype(np.float32))
+    lat_tomatch = np.deg2rad(dataset_tomatch.latitude.values.astype(np.float32))
+    lat_tomatch_grid, lon_tomatch_grid = np.meshgrid(lat_tomatch, lon_tomatch,
+            indexing='ij')
+    
+    # Put everything in two stacked lists (format required by BallTree).
+    coarse_grid_list = np.vstack([lat_tomatch_grid.ravel().T, lon_tomatch_grid.ravel().T]).T
+    
+    ball = BallTree(np.vstack([lat_grid.ravel().T, lon_grid.ravel().T]).T, metric='haversine')
+    
+    distances, index_array_1d = ball.query(coarse_grid_list, k=1)
+    
+    # Convert back to kilometers.
+    distances_km = 6371 * distances
+
+    # Sanity check.
+    print("Maximal distance to matched point: {} km.".format(np.max(distances_km)))
+    
+    # get_neighbour_info() returns indices in the flattened lat/lon grid. Compute
+    # the 2D grid indices:
+    index_array_2d = np.hstack(np.unravel_index(index_array_1d, lon_grid.shape))
+
+    return index_array_1d, index_array_2d
+
+
+def build_base_forward(model_dataset, data_dataset):
+    
+    index_array_1d, index_array_2d = match_datasets(model_dataset, data_dataset)
+
+    model_lon_dim = len(model_dataset.longitude)
+    model_lat_dim = len(model_dataset.latitude)
+    data_lon_dim = len(data_dataset.longitude)
+    data_lat_dim = len(data_dataset.latitude)
+
+    G = np.zeros((data_lon_dim * data_lat_dim, model_lon_dim * model_lat_dim),
+            np.float32)
+
+    # Set corresponding cells to 1 (ugly implementation, could be better).
+    for data_ind, model_ind in enumerate(index_array_1d):
+        G[data_ind, model_ind] = 1.0
+
+    return G
+
+2) Create array for 6 months
+def H_6_months(xbm1,y1):
+    H_00 = build_base_forward(xbm1.isel(time=0),y1.isel(time=0))
+    H_01 = build_base_forward(xbm1.isel(time=0),y1.isel(time=1))
+    H_02 = build_base_forward(xbm1.isel(time=0),y1.isel(time=2))
+    H_03 = build_base_forward(xbm1.isel(time=0),y1.isel(time=3))
+    H_04 = build_base_forward(xbm1.isel(time=0),y1.isel(time=4))
+    H_05 = build_base_forward(xbm1.isel(time=0),y1.isel(time=5))
+    H0 = np.hstack((H_00,H_01,H_02,H_03,H_04,H_05))
+    
+    H_10 = build_base_forward(xbm1.isel(time=1),y1.isel(time=0))
+    H_11 = build_base_forward(xbm1.isel(time=1),y1.isel(time=1))
+    H_12 = build_base_forward(xbm1.isel(time=1),y1.isel(time=2))
+    H_13 = build_base_forward(xbm1.isel(time=1),y1.isel(time=3))
+    H_14 = build_base_forward(xbm1.isel(time=1),y1.isel(time=4))
+    H_15 = build_base_forward(xbm1.isel(time=1),y1.isel(time=5))
+    H1 = np.hstack((H_10,H_11,H_12,H_13,H_14,H_15))
+    
+    H_20 = build_base_forward(xbm1.isel(time=2),y1.isel(time=0))
+    H_21 = build_base_forward(xbm1.isel(time=2),y1.isel(time=1))
+    H_22 = build_base_forward(xbm1.isel(time=2),y1.isel(time=2))
+    H_23 = build_base_forward(xbm1.isel(time=2),y1.isel(time=3))
+    H_24 = build_base_forward(xbm1.isel(time=2),y1.isel(time=4))
+    H_25 = build_base_forward(xbm1.isel(time=2),y1.isel(time=5))
+    H2 = np.hstack((H_20,H_21,H_22,H_23,H_24,H_25))
+    
+    H_30 = build_base_forward(xbm1.isel(time=3),y1.isel(time=0))
+    H_31 = build_base_forward(xbm1.isel(time=3),y1.isel(time=1))
+    H_32 = build_base_forward(xbm1.isel(time=3),y1.isel(time=2))
+    H_33 = build_base_forward(xbm1.isel(time=3),y1.isel(time=3))
+    H_34 = build_base_forward(xbm1.isel(time=3),y1.isel(time=4))
+    H_35 = build_base_forward(xbm1.isel(time=3),y1.isel(time=5))
+    H3 = np.hstack((H_30,H_31,H_32,H_33,H_34,H_35))
+    
+    H_40 = build_base_forward(xbm1.isel(time=4),y1.isel(time=0))
+    H_41 = build_base_forward(xbm1.isel(time=4),y1.isel(time=1))
+    H_42 = build_base_forward(xbm1.isel(time=4),y1.isel(time=2))
+    H_43 = build_base_forward(xbm1.isel(time=4),y1.isel(time=3))
+    H_44 = build_base_forward(xbm1.isel(time=4),y1.isel(time=4))
+    H_45 = build_base_forward(xbm1.isel(time=4),y1.isel(time=5))
+    H4 = np.hstack((H_40,H_41,H_42,H_43,H_44,H_45))
+    
+    H_50 = build_base_forward(xbm1.isel(time=5),y1.isel(time=0))
+    H_51 = build_base_forward(xbm1.isel(time=5),y1.isel(time=1))
+    H_52 = build_base_forward(xbm1.isel(time=5),y1.isel(time=2))
+    H_53 = build_base_forward(xbm1.isel(time=5),y1.isel(time=3))
+    H_54 = build_base_forward(xbm1.isel(time=5),y1.isel(time=4))
+    H_55 = build_base_forward(xbm1.isel(time=5),y1.isel(time=5))
+    H5 = np.hstack((H_50,H_51,H_52,H_53,H_54,H_55))
+    
+    H = np.vstack((H0,H1,H2,H3,H4,H5))
+    return H
+    
+3) Apply localization matrix:
+    def localization_matrix_6_months(localizer):
+        d = localizer
+        RHO = np.block([[d, d, d, d, d, d], [d, d, d, d, d, d], [d, d, d, d, d, d],
+                        [d, d, d, d, d, d], [d, d, d, d, d, d], [d, d, d, d, d, d]])
+    return RHO
+    
+4) Build localization matrix:
+    latitude = dataset_members.latitude
+    longitude = dataset_members.longitude
+    cluster = ...
+    client = ...
+    theta = gcd_dask_future(latitude,longitude,client) # great circle distance for 1 month
+    localizer = spherical_dask(alpha=...,theta=theta, client = client)
+    localizer = localizer.result()
+    xbm1,y1 = dataset_mean.anomaly.unstack(),dataset_instrumenta.anomaly.unstack()
+    H = H_6_months(xbm1,y1)
+    localization_matrix_6_months = client.submit(localization_matrix_6_months,localizer) 
+    """
 
 def gcd_dask_future(lat, lon, client):
     """great circle distance using Vincenty's Formulae
@@ -75,6 +202,28 @@ def gcd_dask_future(lat, lon, client):
     x = client.submit(da.arctan2, 1, m)
     y = client.submit(da.multiply, x, r)  # get distance in km
     return y
+
+def rao_blackwell_ledoit_wolf(S,client):
+    n = S.shape[0]
+    p = len(S)
+    assert S.shape == (p, p)
+
+    alpha = (n-2)/(n*(n+2))
+    beta = ((p+1)*n - 2) / (n*(n+2))
+    S2 = client.submit(da.dot,S,S)
+    trace_S2 = client.submit(da.trace,S2)
+    trace_S = client.submit(da.trace,S)
+    trace_S_squared = client.submit(da.float_power,S,2)
+    term = client.submit(da.true_divide,trace_S2,trace_S_squared)
+    term = client.gather(term)
+    U = ((p * term) - 1)
+    rho = da.min(alpha + da.true_divide(beta,U), 1)
+    mu = client.submit(da.true_divide,S,p)
+    F = client.submit(da.multiply,mu,da.eye(p))
+    a = client.submit(da.multiply,1-rho,S)
+    b = client.submit(da.multiply,rho,F)
+    c = client.submit(da.add,a,b)
+    return c
 
 def bernoulli(alpha, theta, lower,n, upper, client):
     theta = client.scatter(theta)  
