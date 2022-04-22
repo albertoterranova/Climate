@@ -137,11 +137,11 @@ def H_6_months(xbm1,y1):
     cluster = ...
     client = ...
     theta = gcd_dask_future(latitude,longitude,client) # great circle distance for 1 month
-    localizer = spherical_dask(alpha=...,theta=theta, client = client)
+    localizer = spherical_dask(alpha=...,theta=theta, client = client) # spherical localization for 1 month
     localizer = localizer.result()
-    xbm1,y1 = dataset_mean.anomaly.unstack(),dataset_instrumenta.anomaly.unstack()
-    H = H_6_months(xbm1,y1)
-    localization_matrix_6_months = client.submit(localization_matrix_6_months,localizer) 
+    # xbm1,y1 = dataset_mean.anomaly.unstack(),dataset_instrumenta.anomaly.unstack() # needed for building the forward matrix in my old setup
+    # H = H_6_months(xbm1,y1) # build forward matrix for 6 months
+    localization_matrix_6_months = client.submit(localization_matrix_6_months,localizer)  # stack the 1 month localization to the whole update window of 6 month
     """
 
 def gcd_dask_future(lat, lon, client):
