@@ -7,7 +7,6 @@ The folder /Covariance contains:
 - covariance_kernels_sphere.py - Positive Definite Functions on The Sphere
 - shrinkage.py - Ledoit Wolf, Rao-Blackwellized-Ledoit-Wolf, Knowledge Aided
 
-The folder /Cython contains:
 
 ## Cython
 
