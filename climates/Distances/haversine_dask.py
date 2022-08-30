@@ -6,13 +6,7 @@ EARTH_RADIUS_KM = 6371.0088
 
 
 def haversine_vector_dask(array1, array2,  client, comb=True):
-    '''
-    The exact same function as "haversine", except that this
-    version replaces math functions with numpy functions.
-    This may make it slightly slower for computing the haversine
-    distance between two points, but is much faster for computing
-    the distance between two vectors of points due to vectorization.
-    '''
+    
 
     # ensure will be able to iterate over rows by adding dimension if needed
     if array1.ndim == 1:
