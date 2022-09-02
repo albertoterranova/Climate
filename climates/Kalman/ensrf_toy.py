@@ -10,6 +10,7 @@ from climates.Covariance.shrinkage import *
 from climates.Distances.haversine_dask import *
 import numpy as np
 from climates.Scoring.scoring import *
+from climates.Plot.plot import *
 
 cluster = LocalCluster()
 client = Client(cluster)
@@ -77,3 +78,7 @@ crps = crps_ensembles_xarray(xa.unstack(), ref.T)
 
 es = es_score_xarray(xa.T, ref.stack(
     stacked_dim=('latitude', 'longitude', 'time')))
+
+plot_base_map(crps)
+plot_2_vs_2(xam,xam_loc)
+plot_3_vs_3(xm,xam,ref)
